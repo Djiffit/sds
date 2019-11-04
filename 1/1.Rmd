@@ -1,0 +1,87 @@
+---
+title: "Execise 1"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 2
+
+Uncertainty describes the inability to perfectly predict some process, phenomenon or event. Often it is that we can't understand all the possible factors influencing the given random process underlying the interesting event so we can't precisely find the estimate for the likelihood of a given event and we will have some uncertainty about that as well. Even if we manage to quantify the probability of an event into a number we are still left with only the ability to tell what event is the most probable and unable to predict the precise outcome. These kinds of events are the basic coin tosses, dice rolls and card draws etc. Similarily with data-analysis we can't produce a perfect estimation, but rather provide the most likely estimation given what we know and possibly quantify how certain we are about a given prediction.
+
+This is the kind of view of uncertainty that aligns well with the aleatory and epistemic types of uncertainty. Aleatory uncertainty is the kind of uncertainty we see when doing a toss with a fair coin; we are aware that the probability of heads and tails should be 50% so we can't really get a better understanding of the coin and all the uncertainty in the situation is the innate randomness of the activity. Epistemic uncertainty on the other hand is the kind where we can do something to get a better estimate for our probability of an event, be it with better equipment or more experiments.
+
+In the first event the person A has some vital knowledge to form their opinion on the probability of getting a 6 on the dice throw as they have seen the outcome. This means that A has now some information that allows them to assign a probability of 1 or 0, depending on the outcome of the dice roll. On the other hand B, who has no knowledge of the outcome will retain their probability of 1/6 as they lack any extra information into the outcome of the event.
+
+When A has no idea how succesfull Brazil could be they should assign a totally random probability onto the event, i.e. 1/32 or however many teams there are in the tournament. B on the other hand might think that Brazil has a larger of smaller chance of winning the World Cup and thus possibly coming up with a more realistic probability for their chances. In this case though it is possible that B either over or underestimates Brazil's chances due to their own biases instead of relying on for example some statistical analysis about the success of the team in recent history and this way B could produce a win chance that could be further from the real probability than that of A's.
+
+## 3
+
+\begin{equation}
+P(y) = \frac{1}{2} * Norm(1, 2) + \frac{1}{2} * Norm(2, 2)
+\end{equation}
+
+```{r}
+mu1 = 1
+mu2 = 2
+sd = 2
+x = seq(-50, 50, by=0.1)
+sd_big = 100
+sd_small = 0.1
+
+norm1 = dnorm(x, mu1, sd)
+norm2 = dnorm(x, mu2, sd)
+
+plot(x, norm1*0.5 + norm2 * 0.5, type='l', ylab='P(y)', 
+     col='cyan', xlim=c(-6, 8), main='Marginal density of y')
+
+```
+
+
+```{r}
+
+plot(x, norm1, type='l', ylab='P(y)', col='cyan', xlim=c(-6, 8), main='SD = 2')
+lines(x, norm2, type='l', ylab='P(y)', col='salmon')
+abline(v=1, lty='24', col='blue')
+legend('topleft', c('theta=1', 'theta=2', 'y=1'), 
+       col=c('cyan', 'salmon', 'blue'), cex=.8, pch=c(1,1,1))
+
+```
+```{r}
+theta1 = dnorm(1, mu1, sd)
+theta2 = dnorm(1, mu2, sd)
+res = paste(c('P(theta = 1 | y = 1) =', theta1 / (theta1 + theta2)), collapse=" ")
+
+print(res)
+
+```
+```{r}
+
+norm1 = dnorm(x, mu1, sd_big)
+norm2 = dnorm(x, mu2, sd_big)
+
+plot(x, norm1, type='l', main='SD = 100', ylab='P(y)', col='cyan', xlim=c(-45, 45))
+lines(x, norm2, type='l', ylab='P(y)', col='salmon')
+abline(v=1, lty='24', col='blue')
+legend('topleft', c('theta=1', 'theta=2', 'y=1'), 
+       col=c('cyan', 'salmon', 'blue'), cex=.8, pch=c(1,1,1))
+
+```
+```{r}
+
+norm1 = dnorm(x, mu1, sd_small)
+norm2 = dnorm(x, mu2, sd_small)
+
+plot(x, norm1, type='l', ylab='P(y)', main='SD = 0.1', col='cyan', xlim=c(-1, 3))
+lines(x, norm2, type='l', ylab='P(y)', col='salmon')
+abline(v=1, lty='24', col='blue')
+legend('topleft', c('theta=1', 'theta=2', 'y=1'), 
+       col=c('cyan', 'salmon', 'blue'), cex=.8, pch=c(1,1,1))
+
+```
+
+We can see as the standard deviation is increased, the probability gets close to 0.5 at all points as the distributions start to look very similar as the probability mass is distributed among a larger span. On the other hand, when the standard deviation is decreased, the distributions become more concentrated and the probability values for theta approach 1 and 0 within the respective distributions.
