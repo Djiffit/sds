@@ -1,0 +1,122 @@
+---
+title: "Experimenting with Markov chain"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Markov chain sampling
+
+The purpose of this exercise is to study the properties of Markov chains and how they can be used to produce samples for Monte Carlo estimation.
+
+
+Consider a Markov chain defined as follows:
+
+ * set $\theta^{(0)} = C$, where $C$ is some constant number.
+ * for $i=1,\dots$ sample $\theta^{(i)} \sim N(\phi \theta^{(i-1)},\sigma^2)$ where $\phi\in[0,1)$ is a parameter controlling the autocorrelation between samples.
+
+Note! This is a Markov chain that is constructed very differently from how Stan constructs the Markov chains to sample from the posterior distributions. However, the properties related to autocorrelation and initial value are analogous.
+
+**Result for task 1: the limits**
+
+When $\phi$ approaches zero, the variance approaches $\sigma^2$, and when $\phi$ approaches one, the variance approaches infinity as $1-\phi^2$ approaches zero.
+
+So in the first case correlation approaches 0 and in the second case correlation approaches 1.
+
+
+**Result for task 2: the table**
+
+Given the marginal variance for $\theta^{(i)}$ we can solve for $\phi$ and $\sigma^2$ when the other is given
+
+```{r}
+# First row
+var = 1
+phi = 0
+sigma2 = 1
+corr = 0
+
+
+# Second row
+var = 1
+phi = 0.5
+sigma2 = 3/4
+corr = .5
+
+# Third row
+var = 1
+phi = 0.894427
+sigma2 = .2
+corr = 0.894427
+
+
+# Fourth row
+var = 1
+phi = 0.1
+sigma2 = .99
+corr = 0.1
+```
+
+
+**Result for task 3**
+
+Implement the above Markov chain with R and use it to sample random realizations of $\theta^{(i)}$ where $i=1,\dots,100$ with the parameter values given in the above table. As an initial value use $C=10$. Plot the sample chain and based on the visual inspection, what can you say about the convergence and mixing properties of the chain with the different choices of $\phi$?
+
+
+```{r}
+# let's first define a function to conduct the sampling
+
+sampler = function(theta, phi, s2) {
+  rnorm(1, phi * theta, s2)
+}
+# Write a for loop to conduct the sampling (Note. This can be written as a function 
+# so that you don't need to repeat the loop many times)
+
+do_sampling = function(theta, phi, s2, n) {
+  vals = c(theta)
+  for (i in 1:n) {
+    theta = sampler(theta, phi, s2)
+    vals = c(vals, theta)
+  }
+  
+  plot(0:n, vals, type='l', main=paste('Phi', phi, ' S2 ', s2))
+  vals
+}
+
+
+# Then we sample from the Markov chain with alternative phi and sigma values and draw them
+vals = list(c(0, 1), c(0.5, 3/4), c(0.894427, .2), c(0.1, 0.99))
+for (params in vals) {
+  phi = params[1]
+  sigma2 = params[2]
+  do_sampling(10, phi, sigma2, 100)
+}
+
+```
+We can see that as phi increases, the number of steps that look correlated increases, as phi approaches zero it seems more quickly as if we are sampling from N(0, 1).
+
+**Result for task 4**
+
+Choose the parameter combination where $\sigma^2=0.2$ from the above table. Run three Markov chains with initial values $C_1 = 10$, $C_2=-10$ and $C_3=5$. Find a burn-in value at which the chains have converged according to the PSRF ($\hat{R}$) statistics. This is implemented in function \texttt{Rhat} in RStan. Note, $m=100$ samples might not be enough here.
+
+
+
+```{r}
+library('rstan')
+phi = 0.894427
+sigma2 = .2
+
+first_vals = do_sampling(10, phi, sigma2, 100)
+second_vals = do_sampling(-10, phi, sigma2, 100)
+third_vals = do_sampling(5, phi, sigma2, 100)
+
+print(Rhat(c(first_vals, second_vals)))
+print(Rhat(c(first_vals, third_vals)))
+print(Rhat(c(third_vals, second_vals)))
+
+```
+
+
