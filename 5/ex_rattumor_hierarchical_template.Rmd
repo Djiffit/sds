@@ -1,0 +1,128 @@
+---
+title: "Exercise Hierarchical model"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+Load the needed libraries into R 
+```{r}
+library(ggplot2)
+library(StanHeaders)
+library(rstan)
+options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = TRUE)
+```
+
+
+write the model description into text file "model_ratTumor.stan", load the data and conduct the sampling. (You can write the model also inline but the model-file option is to illustrate the alternative way.) Note! You can skip defining the initial parameter values (there would be more than 70 of them) and test how well Stan can define them automatically.
+```{r}
+# Load the data and put it into a list format
+dat = read.table ("rats.dat", header=TRUE)
+n = nrow(dat)
+N = dat$N
+y = dat$y
+
+data <- list ("N"=n,"x"=N, "y"=y)   # set data into named list
+
+rat_model = "
+data {
+  int<lower=0> N;
+  int<lower=0> y[N];
+  int<lower=0> x[N];
+}
+parameters {
+  real<lower=0, upper=1> theta[N];
+  real s;
+  real mu;
+}
+model {
+  s ~ lognormal(4, 4);
+  mu ~ uniform(0, 1);
+  for (n in 1:N) {
+    theta[n] ~ beta(mu * s, s - mu * s);
+    y[n] ~ binomial(x[n], theta[n]);
+  }
+}"
+
+init1 <- list (mu = 0.2, s=10)        
+init2 <- list (mu = 0.4, s=20) 
+init3 <- list (mu = 0.6, s=30) 
+init4 <- list (mu = 0.8, s=40) 
+inits = list(init1, init2, init3, init4)  # initial values for four chains
+
+post=stan(model_code = rat_model,data=data,warmup=500,iter=2000,init=inits,chains=4,thin=1,control=list(adapt_delta=0.99))
+```
+
+Examine convergence, autocorrelation etc.
+```{r}
+print(post,pars=c("mu","s", "theta"))
+plot(post, pars=c("mu","s"),plotfun= "trace", inc_warmup = TRUE)
+plot(post, pars=c("mu", "s"), plotfun= "trace", inc_warmup = FALSE)
+
+samples = as.matrix(post,pars=c("s","mu","theta"))
+s_sample=samples[,1]
+mu_sample=samples[,2]
+
+acf(s_sample)
+acf(mu_sample)
+acf(samples[,55])
+acf(samples[,72])
+```
+
+*visualize posterior of $\mu$, $s$ and $\theta_i,i=1,\dots,71$*
+```{r}
+
+hist(mu_sample, main="mu posterior", xlab="mu",breaks=50)
+hist(s_sample, main="s posterior", xlab="s",breaks=30)
+boxplot(samples[,seq(3,73)], main="thetas posterior")
+```
+
+
+
+*what is the interpretation of posterior of $\mu$? For example, what does its posterior distribution tell you?*
+
+We can see that mu is one of the parts forming the theta_i distribution. The product mu * s denotes the proportion of successes in the Beta distribution and s - mu * s denotes the proportion of failures. Thus we can think of mu as a global estimate for our probability of a succes in a single trial.
+
+*what is the interpretation of posterior of $\theta_i$? How does this differ from the interpretation of $\mu$.*
+
+Theta_i describes the probability for a single laboratory and is thus very local quantity whreas mu was a global quantity and as thus we can see that it has much larger variance than mu.
+
+*calculate the posterior predictive distribution of outcome $\tilde{y}_{71}$ of a new experiment with $\tilde{N}_{71}=20$ new test animals in laboratory 71.* 
+
+```{r}
+hist(rbinom(length(samples[,73]), 20, samples[, 73]), main="New sample from Lab 71", xlab='y')
+```
+
+*calculate the posterior predictive distribution of $\theta_{72}$ and $\tilde{y}_{72}$ with $\tilde{N}_{72}=20$ new test animals in a new laboratory of number 72 (a laboratory from where we don't have data yet) that is similar to the existing 71 laboratories* 
+
+
+```{r}
+theta_72 = rbeta(mu_sample, mu_sample * s_sample, s_sample - mu_sample * s_sample)
+hist(theta_72)
+hist(rbinom(length(samples[,55]), 20, theta_72), main="Lab 72", xlab='y')
+```
+
+
+*sample from the posterior distribution of the so called pooled estimate of $\theta$. *
+```{r}
+all_y = sum(y)
+all_x = sum(N)
+thetas = rbeta(10000, all_y + 1, all_x - all_y + 1)
+par(mfrow=c(1,2))
+hist(thetas, breaks=30)
+hist(mu_sample, main="mu posterior", xlab="mu",breaks=30)
+
+mean(thetas)
+mean(mu_sample)
+
+```
+
+The mu and pooled theta are quite similar looking distributions, but the thetas has a slightly higher mean value. This pooled distribution is now the combination of both the prior and all the theta_is that we have in our data.
+
