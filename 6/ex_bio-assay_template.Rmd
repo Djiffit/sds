@@ -1,0 +1,177 @@
+---
+title: "Bio-assay experiment"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Load the needed libraries into R 
+```{r}
+library(ggplot2)
+library(StanHeaders)
+library(rstan)
+
+options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = TRUE)
+```
+
+**1. Define the model and sample from posterior **
+
+Note. There are 2 ways to do the model. One uses ready made functions inv_logit and binomial_logit (see Stan manual). The other 2 uses just definitions. This way is somewhat unstable and you need to adjust control parameters to get the model run so the first way is better
+```{r}
+model_bioassay = "
+data {
+ int<lower=0> N;
+ int<lower=0> y[N];
+ real x[N];
+ int<lower=0> n[N];
+}
+
+parameters{
+  real alpha;
+  real beta;
+}
+
+transformed parameters {
+  vector<lower=0, upper=1>[N] theta;
+  
+  for (i in 1:N) {
+    theta[i] = inv_logit(alpha + beta * x[i]);
+  }
+}
+
+model{
+  alpha ~ normal(0, sqrt(1000000));
+  beta ~ normal(0, sqrt(1000000));
+  
+  for (i in 1:N) {
+    y[i] ~ binomial(n[i], theta[i]);
+  }
+}
+"
+```
+
+Load the data and put it into a list format
+```{r}
+bioassay <- read.table ("ex_bio-assay.dat", header=TRUE)
+bioassay
+N <- nrow(bioassay)
+x <- bioassay$Dose
+n <- bioassay$Nanim
+y <- bioassay$Ndeath
+
+data <- list ("N"=N, "x"=x, "n"=n, "y"=y)
+
+## Define parameters and set initial values for them
+## We are going to sample four chains so we need four starting points
+## It is good practice to set them far apart from each others
+
+init2 = list(a=5, b=5)
+init1 = list(a=1, b=1)
+init3 = list(a=-5, b=-5)
+init4 = list(a=-5, b=-5)
+inits = list(init1, init2, init3, init4)
+
+## Run the Markov chain sampling with Stan:
+post=stan(model_code=model_bioassay,data=data,warmup=500,iter=2000,init=inits,chains=4,thin=5,control=list(adapt_delta=0.9))#,control=list(adapt_delta=0.9))
+
+
+```
+```{r}
+## check the convergence visually and by using PSRF by Gelman and Rubin (Rhat in Stan)
+print(post)
+## visualize posterior (together and one at a time)
+plot(post, pars=c('alpha', 'beta'), plotfun='trace')
+
+stan_ac(post, pars=c('alpha', 'beta'))
+
+results = as.matrix(post, pars=c('alpha', 'beta'))
+a = results[,1]
+b = results[,2]
+## Now parameter a contains a sample from the posterior p(a|y,x,n)
+## and parameter b contains sample from the posterior p(b|y,x,n)
+## We can now plot them in 2D and plot histograms of them
+hist(a, 50, c='red')
+hist(b, 50, c='blue')
+plot(a, b)
+```
+
+
+**2. visualize the posterior of theta as a function of dose level x**
+```{r}
+# See help from the linear regression example
+# mean and appropriate posterior interval
+# NOTE! 
+# the posterior of theta at specific x is not Gaussian as 
+# that of f in the linear regression example. Thus, use 
+# quantile instead of std when calculating the 95% interval.
+xp = seq(-0.8, 0.8, length=101)  # the evaluation points
+theta_mean = 0                       # initialize mean
+q_lower = 0                      # initialize confidence interval
+q_upper = 0                      # initialize 
+
+for (i in 1:length(xp)) {
+  pred = a + b * xp[i]
+  theta_pred = 1 / (1 + exp(-pred))
+  theta_mean[i] = mean(theta_pred)
+  q_lower[i] = quantile(theta_pred, 0.025)
+  q_upper[i] = quantile(theta_pred, 0.975)
+}                        # new figure frame
+
+plot(xp, theta_mean, col='red', type='l', xlab='Dose', ylab='Theta')
+lines(xp, q_lower, col='green', type='l', lty=2)
+lines(xp, q_upper, col='blue', type='l', lty=2)
+```
+
+**3. Calculate the covariance between a and b**
+
+For the prior, both a and b are distributed as N(0, 10^6) and thus they are not correlated so their covariance in the prior is zero.
+
+```{r}
+print(cov(a, b))
+```
+
+
+**4. sample from the posterior distribution of LD50 and visualize it **
+
+
+```{r}
+## Now we will approximate the posterior of LD50 
+## Sample from p(LD50 | x, y, n) and visualize that
+##write the LD50 dose level as function of a and b
+## see book page 77
+ld = -a / b
+
+hist (ld, 70)
+
+print(mean(ld))
+print(quantile(ld, c(0.025, 0.975)))
+
+```
+
+
+**5. visualize the posterior distribution of theta with dose level (log g/ml) 0**
+
+
+```{r}
+p_dist = 1 / (1 + exp(-a -b * 0))
+hist(p_dist)
+```
+
+**6. Posterior predictive distribution for new observation**
+
+ Assume that we want to make new experiments to get better estimate for the LD50 statistics. What is the probability distribution for outcome of new experiments $p( \tilde{y} | \tilde{x},\tilde{n}, x, y, n)$?
+ 
+```{r}
+n_anim = 5
+y_hat = rbinom(length(p_dist), n_anim, p_dist)
+
+print(sum(y_hat > 3) / length(y_hat))
+```
+
+ 
+
